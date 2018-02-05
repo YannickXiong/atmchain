@@ -1,0 +1,18 @@
+# the test cases of transaction interface
+  caseName: 支付-余额充足   # 用例名，备用
+  source: xiaoshang
+  sourceid: 15928     # 商户的userId
+  from: 0xEC44A719e8d253E38c7815638AB301f0B6A05F79 # 用户非L地址
+  to: 0xFc3020C99D9b54932aAD44A3063a788F279dAc1a   # 商户的R地址
+  value: 1000
+  detail:
+    merchantNo: 15927             # 商户号
+    merchantTxNo: Tx-99900001001  # 商户订单号
+    merchantTxId: Tx-99900001001  # 交易流水号
+    txAmount: 160                 # 法币，暂时 *100
+    txATMAmount: 100000000000     # ATM，暂时 *10**8
+    txType: BUY                   # 交易类型，暂时只支持BUY, GFT, RFD
+    txTimestamp:                  # unix时间，暂时到秒
+    txDetail: 精品一号青花瓷(套)    #
+  timestamp:                      #
+  sign:                           # 签名
