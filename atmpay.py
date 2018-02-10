@@ -3,9 +3,9 @@ import time
 import hashlib
 from abc import ABCMeta, abstractclassmethod
 import yaml
+import json
 
-
-__URL__ = "'https://api.atmchain.io/v2"
+__URL__ = "https://api.atmchain.io/v2/auth"
 __HEADERS__ = {
     "Content-Type": "application/json; charset=utf-8",
 }
@@ -24,10 +24,12 @@ class Error(Exception):
        """
 
     def __init__(self, err_msg=None, origin_exception=None):
+
         self.err_msg = err_msg
         self.origin_exception = origin_exception
 
     def __str__(self):
+
         exception_msg = "Exception: %s" % self.err_msg
 
         if self.origin_exception is not None:
@@ -51,10 +53,13 @@ def now():
     :return:
     """
     _unix_time = time.time()
-    _second = int(_unix_time)
-    _million_second = int((_unix_time - _second) * 1000)
+    # _second = int(_unix_time)
+    # _million_second = int((_unix_time - _second) * 1000)
+    #
+    # return _second * 1000 + _million_second
 
-    return _second * 1000 + _million_second
+
+    return str(int(_unix_time))
 
 
 def send_request(method, url, params=None, data=None, headers=None):
@@ -98,6 +103,7 @@ def send_request(method, url, params=None, data=None, headers=None):
 
 
 def load_cases(file):
+
     try:
         with open(file) as fp:
             _data = yaml.load(fp)
@@ -113,6 +119,7 @@ class Signature(metaclass=ABCMeta):
     """
 
     def __init__(self, data):
+
         self.data = data or {}
 
     def capture_finger_point(self, escape=list("sign")):
@@ -142,7 +149,7 @@ class Signature(metaclass=ABCMeta):
             _finger_point += str(self.data[key])
             _finger_point += "&"
 
-            _finger_point = _finger_point[:-1]
+        _finger_point = _finger_point[:-1]
 
         return _finger_point
 
@@ -189,6 +196,7 @@ class AuthSign(Signature):
     """
 
     def __init__(self, data):
+
         super(AuthSign, self).__init__(data)
 
     def generate_signature(self):
@@ -202,6 +210,7 @@ class UserLoginSign(Signature):
     """
 
     def __init__(self, data):
+
         super(UserLoginSign, self).__init__(data)
 
     def generate_signature(self):
@@ -215,6 +224,7 @@ class UserTokenSign(Signature):
     """
 
     def __init__(self, data):
+
         super(UserTokenSign, self).__init__(data)
 
     def generate_signature(self):
@@ -228,6 +238,7 @@ class MerchantChangPassWDSign(Signature):
     """
 
     def __init__(self, data):
+
         super(MerchantChangPassWDSign, self).__init__(data)
 
     def generate_signature(self):
@@ -241,6 +252,7 @@ class MerchantSign(Signature):
     """
 
     def __init__(self, data):
+
         super(MerchantSign, self).__init__(data)
 
     def generate_signature(self):
@@ -254,6 +266,7 @@ class MerchantAuditSign(Signature):
     """
 
     def __init__(self, data):
+
         super(MerchantAuditSign, self).__init__(data)
 
     def generate_signature(self):
@@ -267,6 +280,7 @@ class MerchantWithdrawSign(Signature):
     """
 
     def __init__(self, data):
+
         super(MerchantWithdrawSign, self).__init__(data)
 
     def generate_signature(self):
@@ -276,16 +290,17 @@ class MerchantWithdrawSign(Signature):
 
 class ATMInterface(metaclass=ABCMeta):
 
-    def __init__(self, method=None, url=None, headers=None, auth_token=None, params=None, data=None):
+    def __init__(self, method=None, url=None, headers=None, params=None, data=None):
+
         self.method = method
         self.url = url or __URL__
         self.headers = headers or __HEADERS__
-        self.auth_token = auth_token
         self.params = params
         self.data = data
         self.response = None
 
     def send_request(self):
+
         self.response = send_request(
             url=self.url,
             method=self.method,
@@ -298,6 +313,7 @@ class ATMInterface(metaclass=ABCMeta):
         pass
 
     def run(self):
+
         self.send_request()
         self.check_results()
 
@@ -309,26 +325,31 @@ class Auth(ATMInterface):
     """
 
     def __init__(self, **kwargs):
+
         super(Auth, self).__init__(**kwargs)
 
     def check_results(self):
+
         assert self.response["result"] == "success"
         assert self.response["expire"] == 7200
 
     def get_token(self):
+
         _token = self.response.get("token", None)
         return _token
 
 
 class ATMInterfaceEngine(metaclass=ABCMeta):
 
-    def __init__(self, method=None, url=None, headers=None, auth_token=None, params=None, data=None):
+    def __init__(self, method=None, url=None, headers=None, auth_token=False, params=None, test_data=None):
+
         self.method = method
         self.url = url or __URL__
         self.headers = headers or __HEADERS__
         self.auth_token = auth_token
         self.params = params
-        self.data = data
+        self.test_data = test_data or {}  # 从yaml提取的原始的测试数据，保留方便以后备用
+        self.data = None             # 根据test_data处理（主要是计算签名，提取测试数据）后的数据，直接发给服务端
 
         self.signature = None
         self.params_all = {}
@@ -346,11 +367,15 @@ class ATMInterfaceEngine(metaclass=ABCMeta):
         pass
 
     @abstractclassmethod
-    def params_prepare(self):
+    def headers_prepare(self):
         pass
 
     @abstractclassmethod
-    def headers_prepare(self):
+    def test_data_prepare(self):
+        pass
+
+    @abstractclassmethod
+    def signature_prepare(self):
         pass
 
     @abstractclassmethod
@@ -358,16 +383,32 @@ class ATMInterfaceEngine(metaclass=ABCMeta):
         pass
 
     @abstractclassmethod
-    def signature_prepare(self):
+    def params_prepare(self):
         pass
 
     def params_all_prepare(self):
-        self.params_all = self.__dict__
-        # 去掉底层接口(interface->request)不相干的参数
-        self.params_all.pop("params_all")
-        self.params_all.pop("signature")
+
+        # 问题： 这样写，params_all是self.__dict__的一个引用，后面self.params_all.pop("params_all") 直接
+        # 造成对象中没有params_all这个方法了
+        # self.params_all = self.__dict__
+        # # 去掉底层接口(interface->request)不相干的参数
+        # self.params_all.pop("params_all")
+        # self.params_all.pop("signature")
+
+        # 这种方法可行，但是容易出现KeyError
+        # self.params = self.__dict__.copy()
+        # self.params_all.pop("params_all")
+        # self.params_all.pop("signature")
+
+        for key, value in self.__dict__.items():
+            if key == "params_all" or key == "test_data" or key == "signature" or key == "auth_token":
+                continue
+
+            self.params_all[key] = value
+
 
     def prepare(self):
+
         self.url_prepare()
 
         self.method_prepare()
@@ -375,58 +416,77 @@ class ATMInterfaceEngine(metaclass=ABCMeta):
         self.auth_token_prepare()
         self.headers_prepare()
 
-        self.params_prepare()
-
-        self.signature_prepare()
+        self.test_data_prepare()
         self.data_prepare()
+        self.signature_prepare()
+
+        self.params_prepare()
 
         self.params_all_prepare()
 
     def get_params_all(self):
+
         return self.params_all
 
 
 class AuthEngine(ATMInterfaceEngine):
 
+    def __init__(self, method=None, url=None, headers=None, auth_token=None, params=None, test_data=None):
+        super(AuthEngine, self).__init__(method, url, headers, auth_token, params, test_data)
+        self.signature = None
+        self.params_all = {}
+
     def url_prepare(self):
         pass
+
+    def method_prepare(self):
+
+        self.method = "get"
 
     def auth_token_prepare(self):
         pass
 
-    def method_prepare(self):
-        self.method = "get"
-
     def headers_prepare(self):
         pass
 
-    def data_prepare(self):
-        _test_data = load_cases("./testCases/app/auth.yaml")
+    def test_data_prepare(self):
+
+        _test_data = load_cases("./testCases.conf/app/auth.yaml")
         _test_data["timestamp"] = now()
 
-        self.data = _test_data
+        self.test_data = _test_data
+
+    def data_prepare(self):
+
+        self.data = self.test_data.copy()
+        self.data.pop("caseName")
+        self.data = json.dumps(self.data)
 
     def signature_prepare(self):
-        _sign = AuthSign(self.data)
+
+        _sign = AuthSign(json.loads(self.data))
         _signature = _sign.generate_signature()
 
         self.signature = _signature
 
+
     def params_prepare(self):
 
-        # 对于request.get方法，参数在params，而非data中传递
-        self.data["sign"] = self.signature
+        # 对于request.get方法，参数在params，而非data中传递，并且是字典，而非json
+        self.params = json.loads(self.data)
+        self.params["sign"] = self.signature
 
     def token_prepare(self):
         pass
 
+    def get_token(self):
+
+        self.prepare()
+
+        _auth = Auth(**self.params_all)
+        _auth.run()
+        return _auth.get_token()
+
 
 auth = AuthEngine()
-print(auth.params_all)
-
-
-
-
-
-
-
+print(auth.get_token())
